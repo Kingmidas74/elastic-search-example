@@ -5,7 +5,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	httpSwagger "github.com/swaggo/http-swagger"
-	"log"
 	"net/http"
 	"strconv"
 )
@@ -26,14 +25,15 @@ func (a *App) Initialize(db *Database, elastic *Elastic) {
 	a.initializeRoutes()
 }
 
-func (a *App) Run(port int) {
+func (a *App) Run(port int) error {
 
 	a.Router.PathPrefix("").Handler(httpSwagger.WrapHandler)
 
 	err := http.ListenAndServe(":"+strconv.Itoa(port), a.Router)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
+	return nil
 }
 
 func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {

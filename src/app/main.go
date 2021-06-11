@@ -30,7 +30,10 @@ func main() {
 
 	currentEnvironment := os.Getenv("ENVIRONMENT")
 	if len(currentEnvironment) == 0 || currentEnvironment == "Development" {
-		godotenv.Load()
+		err := godotenv.Load()
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	db := models.Database{}
@@ -39,31 +42,36 @@ func main() {
 	}
 
 	elastic := models.Elastic{}
-	if esPort, err := strconv.Atoi(os.Getenv("ES_PORT")); err == nil {
-		err := elastic.Initialize(models.ESSettings{
-			Host: os.Getenv("ES_HOST"),
-			Port: esPort,
-		})
-		if err != nil {
-			log.Fatal(err)
-		}
-	} else {
+	esPort, err := strconv.Atoi(os.Getenv("ES_PORT"))
+
+	if err != nil {
+		log.Fatal(err)
+	}
+	esSettings := models.ESSettings{
+		Host: os.Getenv("ES_HOST"),
+		Port: esPort,
+	}
+	if err := elastic.Initialize(esSettings); err != nil {
 		log.Fatal(err)
 	}
 
 	a := models.App{}
 	a.Initialize(&db, &elastic)
 
-	Initialize(&a)
-	if appPort, err := strconv.Atoi(os.Getenv("APP_PORT")); err == nil {
-		log.Printf("Starting application on port %d", appPort)
-		a.Run(appPort)
-	} else {
+	Seeding(&a)
+
+	appPort, err := strconv.Atoi(os.Getenv("APP_PORT"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("Starting application on port %d", appPort)
+	err = a.Run(appPort)
+	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func Initialize(app *models.App) {
+func Seeding(app *models.App) {
 	csvReader := models.CSVReader{}
 	seedPath := os.Getenv("SEED_FILE_PATH")
 	if len(seedPath) == 0 {

@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	es "github.com/elastic/go-elasticsearch"
 	"github.com/elastic/go-elasticsearch/v8/esapi"
-	"log"
 	"strconv"
 	"strings"
 )
@@ -25,7 +25,7 @@ type ESDocument struct {
 	Content string
 }
 
-func (doc *ESDocument) ToJSON() string {
+func (doc *ESDocument) ToJSON() (string, error) {
 
 	docStruct := &ESDocument{
 		Content: doc.Content,
@@ -33,10 +33,9 @@ func (doc *ESDocument) ToJSON() string {
 
 	b, err := json.Marshal(docStruct)
 	if err != nil {
-		log.Fatal("json.Marshal ERROR:", err)
-		return err.Error()
+		return "", err
 	}
-	return string(b)
+	return string(b), nil
 }
 
 func (elastic *Elastic) Initialize(settings ESSettings) error {
@@ -47,7 +46,6 @@ func (elastic *Elastic) Initialize(settings ESSettings) error {
 	}
 	e, err := es.NewClient(cf)
 	if err != nil {
-		log.Fatal(err)
 		return err
 	}
 	elastic.Client = e
@@ -56,41 +54,43 @@ func (elastic *Elastic) Initialize(settings ESSettings) error {
 
 func (elastic *Elastic) CreateIndex(index string) error {
 
-	var idxs []string
-	idxs = append(idxs, index)
-	elastic.Client.DeleteByQuery(idxs, nil)
+	var indices []string
+	indices = append(indices, index)
+	_, err := elastic.Client.DeleteByQuery(indices, nil)
+	if err != nil {
+		return err
+	}
 
 	if _, err := elastic.Client.Index(index, nil); err != nil {
-		log.Fatal(err)
 		return err
 	}
 	return nil
 }
 
 func (elastic *Elastic) UploadDocument(index string, id string, doc ESDocument) (bool, error) {
+	jsonDoc, err := doc.ToJSON()
+	if err != nil {
+		return false, err
+	}
 	req := esapi.IndexRequest{
 		Index:      index,
 		DocumentID: id,
-		Body:       strings.NewReader(doc.ToJSON()),
+		Body:       strings.NewReader(jsonDoc),
 		Refresh:    "true",
 	}
 	res, err := req.Do(context.Background(), elastic.Client)
 	if err != nil {
-		log.Fatalf("IndexRequest ERROR: %s", err)
 		return false, err
 	}
 	defer res.Body.Close()
 
 	if res.IsError() {
-		log.Printf("%s ERROR indexing document ID=%s", res.String(), id)
-		return false, nil
-	} else {
+		return false, errors.New(res.String())
+	}
 
-		// Deserialize the response into a map.
-		var resMap map[string]interface{}
-		if err := json.NewDecoder(res.Body).Decode(&resMap); err != nil {
-			log.Printf("Error parsing the response body: %s", err)
-		}
+	var resMap map[string]interface{}
+	if err := json.NewDecoder(res.Body).Decode(&resMap); err != nil {
+		return false, err
 	}
 	return true, nil
 }
@@ -99,7 +99,6 @@ func (elastic *Elastic) DropDocument(index string, id string) error {
 
 	response, err := elastic.Client.Delete(index, id)
 	if err != nil {
-		log.Fatal(err)
 		return err
 	}
 	defer response.Body.Close()
@@ -127,7 +126,6 @@ func (elastic *Elastic) SearchDocuments(index string, key string, term string) (
 		elastic.Client.Search.WithPretty(),
 	)
 	if err != nil {
-		log.Fatal(err)
 		return nil, err
 	}
 	defer response.Body.Close()

@@ -2,7 +2,6 @@ package models
 
 import (
 	"github.com/gocarina/gocsv"
-	"log"
 	"os"
 )
 
@@ -23,7 +22,6 @@ func (reader *CSVReader) Initialize(filepath string) {
 func (reader *CSVReader) ReadContent() ([]CSVPost, error) {
 	in, err := os.Open(reader.FilePath)
 	if err != nil {
-		log.Fatal(err)
 		return nil, err
 	}
 	defer in.Close()
@@ -31,7 +29,6 @@ func (reader *CSVReader) ReadContent() ([]CSVPost, error) {
 	var posts []CSVPost
 
 	if err := gocsv.UnmarshalFile(in, &posts); err != nil {
-		log.Fatal(err)
 		return nil, err
 	}
 	return posts, nil

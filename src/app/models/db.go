@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/google/uuid"
-	"log"
 )
 
 type Database struct {
@@ -20,14 +19,14 @@ type DBPost struct {
 
 func (db *Database) Initialize(host, port, user, password, dbname string) error {
 	connectionString :=
-		fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
+		fmt.Sprintf("host=%s port=%s user=%s password=%s sslmode=disable", host, port, user, password)
 
 	var err error
 	db.client, err = sql.Open("postgres", connectionString)
 	if err != nil {
-		log.Fatal(err)
 		return err
 	}
+	_, _ = db.client.Exec("CREATE DATABASE " + dbname)
 	return nil
 }
 
@@ -47,7 +46,6 @@ func (db *Database) up() error {
 	)`
 
 	if _, err := db.client.Exec(tableCreationQuery); err != nil {
-		log.Fatal(err)
 		return err
 	}
 	return nil
@@ -72,7 +70,6 @@ func (db *Database) getPostsByIds(ids []uuid.UUID) ([]DBPost, error) {
 	rows, err := db.client.Query(query)
 
 	if err != nil {
-		log.Fatal(err)
 		return nil, err
 	}
 
@@ -83,7 +80,6 @@ func (db *Database) getPostsByIds(ids []uuid.UUID) ([]DBPost, error) {
 	for rows.Next() {
 		var p DBPost
 		if err := rows.Scan(&p.ID, &p.Text, &p.CreatedDate, &p.Rubrics); err != nil {
-			log.Fatal(err)
 			return nil, err
 		}
 		posts = append(posts, p)
