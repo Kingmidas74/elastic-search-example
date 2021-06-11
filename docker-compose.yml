@@ -7,8 +7,6 @@ volumes:
     driver: local
   pg_data:
     driver: local
-  kibana_data:
-    driver: local
 
 networks:
   elastic:
@@ -16,18 +14,33 @@ networks:
 
 services:
 
-  #app:
-  #  image: go-app:latest
-  #  build:
-  #    context: .
-  #    dockerfile: Dockerfile
-  #  hostname: app
-  #  ports:
-  #    - 8015:8010
-  #  container_name: go_app
-  #  restart: unless-stopped
-  #  networks:
-  #    - elastic
+  app:
+    image: go-app:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    hostname: app
+    ports:
+      - 8015:8010
+    container_name: go_app
+    restart: unless-stopped
+    environment:
+      DB_HOST: "db"
+      DB_PORT: "5432"
+      DB_USER: "postgres"
+      DB_PASSWORD: "TestPassw0rd!"
+      DB_NAME: "db"
+      ES_HOST: "es"
+      ES_PORT: "9200"
+      SEED_FILE_PATH: "/app/posts.csv"
+      ENVIRONMENT: "Docker"
+    depends_on:
+      es:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    networks:
+      - elastic
 
   db:
     image: postgres:13.2-alpine
@@ -38,6 +51,11 @@ services:
       - 6432:5432
     container_name: go_db
     restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     environment:
       PGDATA: "/var/lib/postgresql/data/pgdata"
       POSTGRES_PASSWORD: "TestPassw0rd!"
@@ -53,7 +71,8 @@ services:
       PGADMIN_DEFAULT_EMAIL: "test@mail.ru"
       PGADMIN_DEFAULT_PASSWORD: "TestPassw0rd!"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     ports:
       - 6433:80
     volumes:
@@ -66,24 +85,16 @@ services:
     container_name: es
     environment:
       - "discovery.type=single-node"
+    healthcheck:
+      test: ["CMD-SHELL", "curl --silent --fail localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
    # volumes:
    #   - es_data:/usr/share/elasticsearch/data
     restart: always
     ports:
       - 9200:9200
       - 9300:9300
-    networks:
-      - elastic
-
-  kib:
-    image: docker.elastic.co/kibana/kibana:7.13.1
-    container_name: kib
-    volumes:
-      - kibana_data:/usr/share/kibana/data
-    ports:
-      - 5601:5601
-    environment:
-      ELASTICSEARCH_URL: http://es:9200
-      ELASTICSEARCH_HOSTS: '["http://es:9200"]'
     networks:
       - elastic

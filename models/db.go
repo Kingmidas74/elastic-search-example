@@ -101,3 +101,10 @@ func (p *DBPost) CreatePost(db *Database) error {
 	}
 	return nil
 }
+
+func (db *Database) RemovePost(id uuid.UUID) error {
+	if _, err := db.client.Exec("DELETE FROM posts WHERE id=$1", id); err != nil {
+		return err
+	}
+	return nil
+}
