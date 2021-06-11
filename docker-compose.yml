@@ -17,11 +17,8 @@ services:
   app:
     image: go-app:latest
     build:
-      context: .
-      dockerfile: Dockerfile
-    hostname: app
-    ports:
-      - 8015:8010
+      context: ./src
+      dockerfile: ./app/Dockerfile
     container_name: go_app
     restart: unless-stopped
     environment:
@@ -39,6 +36,19 @@ services:
         condition: service_healthy
       db:
         condition: service_healthy
+    networks:
+      - elastic
+
+  nginx:
+    build:
+      context: ./src/nginx
+      dockerfile: Dockerfile
+    container_name: go_nginx
+    restart: unless-stopped
+    ports:
+      - 5000:8989
+    depends_on:
+      - app
     networks:
       - elastic
 
@@ -82,7 +92,7 @@ services:
 
   es:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.13.1
-    container_name: es
+    container_name: go_es
     environment:
       - "discovery.type=single-node"
     healthcheck:
