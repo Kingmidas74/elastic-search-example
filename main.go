@@ -1,91 +1,76 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"github.com/elastic/go-elasticsearch/v8/esapi"
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
 	"log"
-	"reflect"
+	"main/models"
+	"os"
 	"strconv"
-	"strings"
 	_ "strings"
 )
 
 func main() {
 
-	a := App{}
-	a.Initialize(
-		"postgres",
-		"TestPassw0rd!",
-		"db")
-	esapi.DeleteRequest{
-		Index: "test",
-	}.Do(context.Background(), a.ESC)
-
-	res1, err := a.ESC.Index("test", nil)
-	if err != nil {
-		panic(err)
-	}
-	log.Print(res1)
-
-	a.createITable()
-	var docs []string
-	if posts, err := readcsv("/app/posts.csv"); err == nil {
-		for _, post := range posts {
-			p := &postdb{
-				ID:          uuid.New(),
-				CreatedDate: post.CreatedDate,
-				Rubrics:     post.Rubrics,
-				Text:        post.Text,
-			}
-			doc1 := ElasticDocs{}
-			doc1.SomeStr = p.Text
-			doc1.SomeUUID = p.ID.String()
-
-			docStr1 := jsonStruct(doc1)
-			if err != nil {
-				panic(err)
-			}
-
-			if err := p.createPost(a.DB); err != nil {
-				panic(err)
-			}
-			docs = append(docs, docStr1)
-		}
-		for i, bod := range docs {
-			fmt.Println("\nDOC _id:", i+1)
-			fmt.Println(bod)
-
-			// Instantiate a request object
-			req := esapi.IndexRequest{
-				Index:      "test",
-				DocumentID: strconv.Itoa(i + 1),
-				Body:       strings.NewReader(bod),
-				Refresh:    "true",
-			}
-			fmt.Println(reflect.TypeOf(req))
-			res, err := req.Do(context.Background(), a.ESC)
-			if err != nil {
-				log.Fatalf("IndexRequest ERROR: %s", err)
-			}
-			defer res.Body.Close()
-
-			if res.IsError() {
-				restext := res.String()
-				log.Printf("%s ERROR indexing document ID=%d", restext, i+1)
-			} else {
-
-				// Deserialize the response into a map.
-				var resMap map[string]interface{}
-				if err := json.NewDecoder(res.Body).Decode(&resMap); err != nil {
-					log.Printf("Error parsing the response body: %s", err)
-				}
-			}
+	db := models.Database{}
+	if err := db.Initialize(os.Getenv("DB_HOST"), os.Getenv("DB_PORT"), os.Getenv("DB_USER"), os.Getenv("DB_PASSWORD"), os.Getenv("DB_NAME")); err != nil {
+		log.Fatal(err)
+	} else {
+		err := db.Recreate()
+		if err != nil {
+			log.Fatal(err)
 		}
 	}
 
-	a.Run(":8010")
+	elastic := models.Elastic{}
+	if esPort, err := strconv.Atoi(os.Getenv("ES_PORT")); err == nil {
+		err := elastic.Initialize(models.ESSettings{
+			Host: os.Getenv("ES_HOST"),
+			Port: esPort,
+		})
+		if err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		log.Fatal(err)
+	}
+
+	a := models.App{}
+	a.Initialize(&db, &elastic)
+
+	Initialize(&a)
+
+	a.Run(8010)
+}
+
+func Initialize(app *models.App) {
+	csvReader := models.CSVReader{}
+	csvReader.Initialize(os.Getenv("SEED_FILE_PATH"))
+	if csvPosts, err := csvReader.ReadContent(); err == nil {
+		if err := app.ESC.CreateIndex(models.TestIndex); err != nil {
+			log.Fatal(err)
+		}
+
+		for _, csvPost := range csvPosts {
+			dbPost := models.DBPost{}
+			dbPost.ID = uuid.New()
+			dbPost.CreatedDate = csvPost.CreatedDate
+			dbPost.Rubrics = csvPost.Rubrics
+			dbPost.Text = csvPost.Text
+
+			if err := dbPost.CreatePost(app.DB); err != nil {
+				log.Fatal(err)
+			}
+			esDocument := models.ESDocument{}
+			esDocument.Content = csvPost.Text
+
+			uploadResult, err := app.ESC.UploadDocument(models.TestIndex, dbPost.ID.String(), esDocument)
+			if err != nil {
+				log.Fatal(err)
+			}
+			if uploadResult == false {
+				log.Fatalf("Couldn't upload document %s", dbPost.ID.String())
+			}
+		}
+	}
 }

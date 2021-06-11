@@ -16,18 +16,18 @@ networks:
 
 services:
 
-  app:
-    image: go-app:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
-    hostname: app
-    ports:
-      - 8015:8010
-    container_name: go_app
-    restart: unless-stopped
-    networks:
-      - elastic
+  #app:
+  #  image: go-app:latest
+  #  build:
+  #    context: .
+  #    dockerfile: Dockerfile
+  #  hostname: app
+  #  ports:
+  #    - 8015:8010
+  #  container_name: go_app
+  #  restart: unless-stopped
+  #  networks:
+  #    - elastic
 
   db:
     image: postgres:13.2-alpine
@@ -66,8 +66,8 @@ services:
     container_name: es
     environment:
       - "discovery.type=single-node"
-    volumes:
-      - es_data:/usr/share/elasticsearch/data
+   # volumes:
+   #   - es_data:/usr/share/elasticsearch/data
     restart: always
     ports:
       - 9200:9200
